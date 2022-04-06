@@ -1,9 +1,14 @@
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::time::Duration;
 
+use h264_nal_paging::{H264NalUnit, H264Stream};
 use ipnet::{IpAdd, Ipv4Net};
-use tokio::net::TcpSocket;
+use tokio::io::AsyncWriteExt;
+use tokio::net::{TcpSocket, TcpStream};
+use tokio::sync::{broadcast, mpsc};
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::error::TryRecvError;
+use tokio::time::sleep;
 
 pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 	let addr = subnet.addr();
@@ -14,7 +19,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 
 	for i in 1..(1 << suffix_len) {
 		let addr = SocketAddrV4::new(addr.clone().saturating_add(i as u32), port);
-		let (tx, mut rx) = channel(4);
+		let (tx, mut rx) = mpsc::channel(4);
 
 		let listener = tokio::spawn(async move {
 			let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), i));
@@ -37,14 +42,72 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 		listener_stack.push(listener);
 
 		let upstream = tokio::spawn(async move {
+			let mut upstream: Option<H264Stream<TcpStream>> = None;
 			let mut downstreams = vec![];
+
+			let mut stream_init_buf: Vec<Option<H264NalUnit>> = vec![None, None];
+			let mut frame_buf: Vec<H264NalUnit> = vec![];
+
 			loop {
-				let mut upstream = TcpSocket::new_v4().unwrap().connect(SocketAddr::V4(addr)).await?;
+				let mut reinstantiate = true;
+
+				if downstreams.is_empty() {
+					reinstantiate = false;
+				} else {
+					if let Some(ref mut upstream) = &mut upstream {
+						if let Ok(unit) = upstream.next().await {
+							reinstantiate = false;
+
+							let clients = downstreams.len();
+							for j in 1..=clients {
+								let i = clients - j;
+								let downstream = &mut downstreams[i];
+								// Drop connection on write failure
+								if let Err(_) = downstream.write_all(&unit.raw_bytes).await {
+									info!("Disconnected {:?}", downstream.peer_addr());
+									let _ = downstreams.remove(i);
+								}
+							}
+
+							match unit.unit_code {
+								7 => {
+									stream_init_buf[0] = Some(nal);
+								}
+								8 => {
+									stream_init_buf[1] = Some(nal);
+								}
+								5 => {
+									frame_buffer.clear();
+									frame_buf.push(unit);
+								}
+								_ => frame_buf.push(unit)
+							}
+						}
+					}
+				}
+
+				if reinstantiate {
+					sleep(Duration::from_millis(50));
+					info!("Connecting to {:?}", addr);
+					upstream = TcpSocket::new_v4().unwrap()
+						.connect(SocketAddr::V4(addr))
+						.await
+						.ok()
+						.map(|stream| H264Stream::new(stream));
+				}
+
 				'collector: while let recv = rx.try_recv() {
 					match recv {
-						Ok(downstream) => {
-							info!("Proxying {:?} <= {:?}", downstream.peer_addr(), upstream.peer_addr());
-							downstreams.push(downstream)
+						Ok(mut downstream) => {
+							info!("Proxying     {:?} <= {:?}", downstream.peer_addr(), upstream.peer_addr());
+							let _ = downstream.write_all(&stream_init_buf.iter()
+								.filter(|f| f.is_some())
+								.flat_map(|f| &f.as_ref().unwrap().raw_bytes[..])
+								.collect::<Vec<u8>>()).await;
+							let _ = downstream.write_all(&frame_buf.iter()
+								.flat_map(|f| &f.raw_bytes[..])
+								.collect::<Vec<u8>>()).await;
+							downstreams.push(downstream);
 						}
 						Err(TryRecvError::Empty) => break 'collector,
 						Err(e) => error!("{:?}", e)
