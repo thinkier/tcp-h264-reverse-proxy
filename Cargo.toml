@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "tcp-h264-server"
+name = "tcp-h264-reverse-proxy"
 path = "src/main.rs"
 
 [dependencies]
