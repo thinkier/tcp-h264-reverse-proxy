@@ -17,7 +17,7 @@ mod listener;
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args: CliArgs = argh::from_env();
 
-	task_spawner(args.subnet, args.port);
+	task_spawner(args.subnet, args.port).await;
 
 	Ok(())
 }

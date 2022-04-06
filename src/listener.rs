@@ -5,8 +5,7 @@ use h264_nal_paging::{H264NalUnit, H264Stream};
 use ipnet::{IpAdd, Ipv4Net};
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpSocket, TcpStream};
-use tokio::sync::{broadcast, mpsc};
-use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::time::sleep;
 
@@ -24,13 +23,15 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 		let listener = tokio::spawn(async move {
 			let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), i));
 			let sock = TcpSocket::new_v4().unwrap();
-			sock.bind(bind_addr);
+			sock.bind(bind_addr)?;
 
 			let listener = sock.listen(4)?;
-			while let listened = listener.accept().await {
+			loop {
+				let listened = listener.accept().await;
+
 				match listened {
 					Ok((sock, _)) => {
-						tx.send(sock).await;
+						let _ = tx.send(sock).await;
 					}
 					Err(e) => error!("{:?}",e)
 				}
@@ -43,7 +44,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 
 		let upstream = tokio::spawn(async move {
 			let mut upstream: Option<H264Stream<TcpStream>> = None;
-			let mut downstreams = vec![];
+			let mut downstreams: Vec<TcpStream> = vec![];
 
 			let mut stream_init_buf: Vec<Option<H264NalUnit>> = vec![None, None];
 			let mut frame_buf: Vec<H264NalUnit> = vec![];
@@ -71,13 +72,13 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 
 							match unit.unit_code {
 								7 => {
-									stream_init_buf[0] = Some(nal);
+									stream_init_buf[0] = Some(unit);
 								}
 								8 => {
-									stream_init_buf[1] = Some(nal);
+									stream_init_buf[1] = Some(unit);
 								}
 								5 => {
-									frame_buffer.clear();
+									frame_buf.clear();
 									frame_buf.push(unit);
 								}
 								_ => frame_buf.push(unit)
@@ -87,7 +88,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 				}
 
 				if reinstantiate {
-					sleep(Duration::from_millis(50));
+					sleep(Duration::from_millis(50)).await;
 					info!("Connecting to {:?}", addr);
 					upstream = TcpSocket::new_v4().unwrap()
 						.connect(SocketAddr::V4(addr))
@@ -96,16 +97,16 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 						.map(|stream| H264Stream::new(stream));
 				}
 
-				'collector: while let recv = rx.try_recv() {
-					match recv {
+				'collector: loop {
+					match rx.try_recv() {
 						Ok(mut downstream) => {
-							info!("Proxying     {:?} <= {:?}", downstream.peer_addr(), upstream.peer_addr());
+							info!("Proxying     {:?} <= {:?}", downstream.peer_addr(), addr);
 							let _ = downstream.write_all(&stream_init_buf.iter()
 								.filter(|f| f.is_some())
-								.flat_map(|f| &f.as_ref().unwrap().raw_bytes[..])
+								.flat_map(|f| f.as_ref().unwrap().raw_bytes.clone())
 								.collect::<Vec<u8>>()).await;
 							let _ = downstream.write_all(&frame_buf.iter()
-								.flat_map(|f| &f.raw_bytes[..])
+								.flat_map(|f| f.raw_bytes.clone())
 								.collect::<Vec<u8>>()).await;
 							downstreams.push(downstream);
 						}
