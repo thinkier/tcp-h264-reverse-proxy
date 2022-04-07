@@ -7,9 +7,10 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpSocket, TcpStream};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
+use tokio::task::JoinError;
 use tokio::time::sleep;
 
-pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
+pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Result<(), JoinError> {
 	let addr = subnet.addr();
 	let suffix_len = 32 - subnet.prefix_len();
 
@@ -54,6 +55,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 
 				if downstreams.is_empty() {
 					reinstantiate = false;
+					sleep(Duration::from_millis(50)).await;
 				} else {
 					if let Some(ref mut upstream) = &mut upstream {
 						if let Ok(unit) = upstream.next().await {
@@ -88,7 +90,6 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 				}
 
 				if reinstantiate {
-					sleep(Duration::from_millis(50)).await;
 					info!("Connecting to {:?}", addr);
 					upstream = TcpSocket::new_v4().unwrap()
 						.connect(SocketAddr::V4(addr))
@@ -120,4 +121,13 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) {
 		});
 		upstream_stack.push(upstream);
 	}
+
+	for x in listener_stack {
+		let _ = x.await?;
+	}
+	for x in upstream_stack {
+		let _ = x.await?;
+	}
+
+	Ok(())
 }
