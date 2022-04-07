@@ -7,15 +7,14 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpSocket, TcpStream};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
-use tokio::task::JoinError;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
-pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Result<(), JoinError> {
+pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::io::Result<()>>> {
 	let addr = subnet.addr();
 	let suffix_len = 32 - subnet.prefix_len();
 
-	let mut listener_stack = vec![];
-	let mut upstream_stack = vec![];
+	let mut stack = vec![];
 
 	for i in 1..(1 << suffix_len) {
 		let addr = SocketAddrV4::new(addr.clone().saturating_add(i as u32), port);
@@ -41,7 +40,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Result<(), JoinError> {
 			Result::<(), tokio::io::Error>::Ok(())
 		});
 
-		listener_stack.push(listener);
+		stack.push(listener);
 
 		let upstream = tokio::spawn(async move {
 			let mut upstream: Option<H264Stream<TcpStream>> = None;
@@ -90,7 +89,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Result<(), JoinError> {
 				}
 
 				if reinstantiate {
-					info!("Connecting to {:?}", addr);
+					info!("Connecting to upstream {:?}", addr);
 					upstream = TcpSocket::new_v4().unwrap()
 						.connect(SocketAddr::V4(addr))
 						.await
@@ -119,15 +118,8 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Result<(), JoinError> {
 
 			Result::<(), tokio::io::Error>::Ok(())
 		});
-		upstream_stack.push(upstream);
+		stack.push(upstream);
 	}
 
-	for x in listener_stack {
-		let _ = x.await?;
-	}
-	for x in upstream_stack {
-		let _ = x.await?;
-	}
-
-	Ok(())
+	return stack;
 }
