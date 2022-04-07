@@ -30,8 +30,8 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 				let listened = listener.accept().await;
 
 				match listened {
-					Ok((sock, _)) => {
-						let _ = tx.send(sock).await;
+					Ok((sock, addr)) => {
+						let _ = tx.send((sock, addr)).await;
 					}
 					Err(e) => error!("{:?}",e)
 				}
@@ -42,7 +42,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 
 		let upstream = tokio::spawn(async move {
 			let mut upstream: Option<H264Stream<TcpStream>> = None;
-			let mut downstreams: Vec<TcpStream> = vec![];
+			let mut downstreams: Vec<(TcpStream, SocketAddr)> = vec![];
 
 			let mut stream_init_buf: Vec<Option<H264NalUnit>> = vec![None, None];
 			let mut frame_buf: Vec<H264NalUnit> = vec![];
@@ -61,10 +61,10 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 							let clients = downstreams.len();
 							for j in 1..=clients {
 								let i = clients - j;
-								let downstream = &mut downstreams[i];
+								let (downstream, ds_addr) = &mut downstreams[i];
 								// Drop connection on write failure
 								if let Err(_) = downstream.write_all(&unit.raw_bytes).await {
-									info!("Disconnected {:?}", downstream.peer_addr());
+									info!("Disconnected {:?}", ds_addr);
 									let _ = downstreams.remove(i);
 								}
 							}
@@ -97,8 +97,8 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 
 				'collector: loop {
 					match rx.try_recv() {
-						Ok(mut downstream) => {
-							info!("Proxying     {:?} <= {:?}", downstream.peer_addr(), addr);
+						Ok((mut downstream, ds_addr)) => {
+							info!("Proxying     {:?} <= {:?}", ds_addr, addr);
 							let _ = downstream.write_all(&stream_init_buf.iter()
 								.filter(|f| f.is_some())
 								.flat_map(|f| f.as_ref().unwrap().raw_bytes.clone())
@@ -106,7 +106,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 							let _ = downstream.write_all(&frame_buf.iter()
 								.flat_map(|f| f.raw_bytes.clone())
 								.collect::<Vec<u8>>()).await;
-							downstreams.push(downstream);
+							downstreams.push((downstream, ds_addr));
 						}
 						Err(TryRecvError::Empty) => break 'collector,
 						Err(e) => error!("{:?}", e)
