@@ -36,8 +36,6 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 					Err(e) => error!("{:?}",e)
 				}
 			}
-
-			Result::<(), tokio::io::Error>::Ok(())
 		});
 
 		stack.push(listener);
@@ -115,8 +113,6 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 					}
 				}
 			}
-
-			Result::<(), tokio::io::Error>::Ok(())
 		});
 		stack.push(upstream);
 	}
