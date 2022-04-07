@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate argh;
+extern crate env_logger;
 extern crate h264_nal_paging;
 #[macro_use]
 extern crate log;
@@ -18,6 +19,7 @@ mod listener;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args: CliArgs = argh::from_env();
+	env_logger::init();
 
 	let handles = task_spawner(args.subnet, args.port).await;
 
