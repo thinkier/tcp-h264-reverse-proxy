@@ -87,8 +87,8 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 									}
 									_ => frame_buf.push(unit)
 								}
-							} else if Instant::now().duration_since(last_unit).as_secs() > 5 {
-								// Reboot the socket if no data was received in 5 secs
+							} else if Instant::now().duration_since(last_unit).as_secs() > 30 {
+								// Reboot the socket if no data was received in 30 secs
 								reinstantiate = true;
 								info!("Dropping inactive upstream {:?}", addr);
 							} else {
