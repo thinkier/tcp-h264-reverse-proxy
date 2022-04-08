@@ -59,9 +59,11 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 					if let Some(ref mut upstream) = &mut upstream {
 						if let Ok(unit) = upstream.try_next().await {
 							reinstantiate = false;
+							debug!("Attempting to read from upstream");
 
 							if let Some(unit) = unit {
 								last_unit = Instant::now();
+								debug!("Received new unit id:{}, len:{}",unit.unit_code, unit.raw_bytes.len());
 
 								let clients = downstreams.len();
 								for j in 1..=clients {
@@ -87,8 +89,8 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 									}
 									_ => frame_buf.push(unit)
 								}
-							} else if Instant::now().duration_since(last_unit).as_secs() > 30 {
-								// Reboot the socket if no data was received in 30 secs
+							} else if Instant::now().duration_since(last_unit).as_secs() > 5 {
+								// Reboot the socket if no data was received in 5 secs
 								reinstantiate = true;
 								info!("Dropping inactive upstream {:?}", addr);
 							} else {
