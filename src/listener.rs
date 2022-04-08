@@ -61,6 +61,8 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 							reinstantiate = false;
 
 							if let Some(unit) = unit {
+								last_unit = Instant::now();
+
 								let clients = downstreams.len();
 								for j in 1..=clients {
 									let i = clients - j;
@@ -85,8 +87,6 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 									}
 									_ => frame_buf.push(unit)
 								}
-
-								last_unit = Instant::now();
 							} else if Instant::now().duration_since(last_unit).as_secs() > 5 {
 								// Reboot the socket if no data was received in 5 secs
 								reinstantiate = true;
@@ -112,7 +112,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 				'collector: loop {
 					match rx.try_recv() {
 						Ok((mut downstream, ds_addr)) => {
-							info!("Proxying     {:?} <= {:?}", ds_addr, addr);
+							info!("Proxying     {:?} <= [cached] <= {:?}", ds_addr, addr);
 							let _ = downstream.write_all(&stream_init_buf.iter()
 								.filter(|f| f.is_some())
 								.flat_map(|f| f.as_ref().unwrap().raw_bytes.clone())
