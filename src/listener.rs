@@ -106,6 +106,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 						.await
 						.ok()
 						.map(|stream| H264Stream::new(stream));
+					last_unit = Instant::now();
 				}
 
 				'collector: loop {
