@@ -13,7 +13,7 @@ path = "src/main.rs"
 argh = "^0.1.7"
 log = "^0.4.14"
 env_logger = "^0.9.0"
-h264_nal_paging = "^0.1.7"
+h264_nal_paging = "^0.1.8"
 ipnet = "^2.4"
 
 [dependencies.hyper]

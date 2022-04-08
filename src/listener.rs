@@ -8,7 +8,7 @@ use tokio::net::{TcpSocket, TcpStream};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
+use tokio::time::{Instant, sleep};
 
 pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::io::Result<()>>> {
 	let addr = subnet.addr();
@@ -47,6 +47,8 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 			let mut stream_init_buf: Vec<Option<H264NalUnit>> = vec![None, None];
 			let mut frame_buf: Vec<H264NalUnit> = vec![];
 
+			let mut last_unit = Instant::now();
+
 			loop {
 				let mut reinstantiate = true;
 
@@ -55,32 +57,43 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
 					sleep(Duration::from_millis(50)).await;
 				} else {
 					if let Some(ref mut upstream) = &mut upstream {
-						if let Ok(unit) = upstream.next().await {
+						if let Ok(unit) = upstream.try_next().await {
 							reinstantiate = false;
 
-							let clients = downstreams.len();
-							for j in 1..=clients {
-								let i = clients - j;
-								let (downstream, ds_addr) = &mut downstreams[i];
-								// Drop connection on write failure
-								if let Err(_) = downstream.write_all(&unit.raw_bytes).await {
-									info!("Disconnected {:?}", ds_addr);
-									let _ = downstreams.remove(i);
+							if let Some(unit) = unit {
+								let clients = downstreams.len();
+								for j in 1..=clients {
+									let i = clients - j;
+									let (downstream, ds_addr) = &mut downstreams[i];
+									// Drop connection on write failure
+									if let Err(_) = downstream.write_all(&unit.raw_bytes).await {
+										info!("Disconnected {:?}", ds_addr);
+										let _ = downstreams.remove(i);
+									}
 								}
-							}
 
-							match unit.unit_code {
-								7 => {
-									stream_init_buf[0] = Some(unit);
+								match unit.unit_code {
+									7 => {
+										stream_init_buf[0] = Some(unit);
+									}
+									8 => {
+										stream_init_buf[1] = Some(unit);
+									}
+									5 => {
+										frame_buf.clear();
+										frame_buf.push(unit);
+									}
+									_ => frame_buf.push(unit)
 								}
-								8 => {
-									stream_init_buf[1] = Some(unit);
-								}
-								5 => {
-									frame_buf.clear();
-									frame_buf.push(unit);
-								}
-								_ => frame_buf.push(unit)
+
+								last_unit = Instant::now();
+							} else if Instant::now().duration_since(last_unit).as_secs() > 5 {
+								// Reboot the socket if no data was received in 5 secs
+								reinstantiate = true;
+								info!("Dropping inactive upstream {:?}", addr);
+							} else {
+								// Sleep on it for 100us while waiting for new data
+								sleep(Duration::from_micros(100)).await;
 							}
 						}
 					}
