@@ -67,10 +67,10 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<tokio::i
                             addr,
                             stream_init_buf
                                 .iter()
-                                .map(|v| v.map_or_else(0, |u| u.raw_bytes.len()))
-                                .sum(),
+                                .map(|v| v.as_ref().map_or(0, |u| u.raw_bytes.len()))
+                                .sum::<usize>(),
                             frame_buf.len(),
-                            frame_buf.iter().map(|v| u.raw_bytes.len()).sum() >> 10
+                            frame_buf.iter().map(|u| u.raw_bytes.len()).sum::<usize>() >> 10
                         );
                     }
 

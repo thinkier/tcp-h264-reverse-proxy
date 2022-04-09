@@ -129,9 +129,9 @@ dependencies = [
 
 [[package]]
 name = "h264_nal_paging"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b518c16bbf155d48a0c7bb400d7393b60be696982e3e8f5377a5d41ba9ed1400"
+checksum = "047b6fbd67ef24810c6c0f1f75f10955c564e6acf39d9af24d59b5391223f19c"
 dependencies = [
  "log",
  "tokio",
