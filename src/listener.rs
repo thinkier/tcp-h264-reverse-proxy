@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, Instant};
+use tokio::time::{Instant, sleep};
 
 pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<IoResult<()>>> {
 	let addr = subnet.addr();
