@@ -67,7 +67,7 @@ async fn socket_server(
         let mut last_unit = Instant::now();
 
         loop {
-            debug!("Outer Loop");
+            trace!("Outer Loop");
             let mut reinstantiate = true;
 
             if upstream.is_some() && Instant::now().duration_since(last_unit).as_secs() > 5 {
@@ -77,14 +77,14 @@ async fn socket_server(
                 reinstantiate = false;
                 sleep(Duration::from_millis(50)).await;
             } else if let Some(ref mut upstream) = &mut upstream {
-                debug!("Upstream read");
+                trace!("Upstream read");
                 if let Ok(unit) = upstream.try_next().await {
                     reinstantiate = false;
-                    debug!("Attempting to read from upstream");
+                    trace!("Attempting to read from upstream");
 
                     if let Some(unit) = unit {
                         last_unit = Instant::now();
-                        debug!(
+                        trace!(
                             "Received new unit id:{}, len:{}",
                             unit.unit_code,
                             unit.raw_bytes.len()
@@ -119,12 +119,12 @@ async fn socket_server(
                         sleep(Duration::from_micros(100)).await;
                     }
                 } else {
-                    debug!("h264 nal paging reported an error that wasn't handled");
+                    trace!("h264 nal paging reported an error that wasn't handled");
                 }
             }
 
             if reinstantiate {
-                debug!("Reconnecting to upstream {}", addr);
+                trace!("Reconnecting to upstream {}", addr);
                 upstream = None;
 
                 match TcpStream::connect(SocketAddr::V4(addr)).await {
@@ -141,7 +141,7 @@ async fn socket_server(
                 };
             }
 
-            debug!("New connection collector");
+            trace!("New connection collector");
             'collector: loop {
                 match input_channel.try_recv() {
                     Ok((mut downstream, ds_addr)) => {
