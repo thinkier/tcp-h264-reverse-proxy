@@ -129,9 +129,9 @@ dependencies = [
 
 [[package]]
 name = "h264_nal_paging"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b518c16bbf155d48a0c7bb400d7393b60be696982e3e8f5377a5d41ba9ed1400"
+checksum = "047b6fbd67ef24810c6c0f1f75f10955c564e6acf39d9af24d59b5391223f19c"
 dependencies = [
  "log",
  "tokio",
@@ -497,9 +497,9 @@ checksum = "360dfd1d6d30e05fda32ace2c8c70e9c0a9da713275777f5a4dbb8a1893930c6"
 
 [[package]]
 name = "tracing"
-version = "0.1.32"
+version = "0.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a1bdf54a7c28a2bbf701e1d2233f6c77f473486b94bee4f9678da5a148dca7f"
+checksum = "80b9fa4360528139bc96100c160b7ae879f5567f49f1782b0b02035b0358ebf3"
 dependencies = [
  "cfg-if",
  "pin-project-lite",
