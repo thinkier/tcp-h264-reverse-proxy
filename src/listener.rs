@@ -20,10 +20,6 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<IoResult
 
     for i in 1..(1 << suffix_len) {
         let addr = SocketAddrV4::new(addr.clone().saturating_add(i as u32), port);
-        if addr.ip().octets()[3] != 204 {
-            continue;
-        }
-
         let (tx, rx) = mpsc::channel(4);
 
         let listener = tokio::spawn(async move {
