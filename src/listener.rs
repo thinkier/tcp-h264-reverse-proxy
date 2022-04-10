@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
-use tokio::time::{Instant, sleep};
+use tokio::time::{sleep, Instant};
 
 pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<IoResult<()>>> {
     let addr = subnet.addr();
@@ -66,14 +66,13 @@ async fn socket_server(
             trace!("Outer Loop");
             let mut reinstantiate = true;
 
-            if upstream.is_some() && Instant::now().duration_since(last_unit).as_secs() > 5 {
+            if downstreams.is_empty() {
+                reinstantiate = false;
+                sleep(Duration::from_millis(50)).await;
+            } else if upstream.is_some() && Instant::now().duration_since(last_unit).as_secs() > 5 {
                 // Reboot the socket if no data was received in 5 secs
                 info!("Dropping inactive upstream {:?}", addr);
-            }  else if let Some(ref mut upstream) = &mut upstream {
-                if downstreams.is_empty() {
-                    sleep(Duration::from_millis(50)).await;
-                }
-
+            } else if let Some(ref mut upstream) = &mut upstream {
                 trace!("Upstream read");
                 if let Ok(unit) = upstream.try_next().await {
                     reinstantiate = false;
