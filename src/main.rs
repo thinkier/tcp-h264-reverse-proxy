@@ -13,20 +13,20 @@ use tokio::signal;
 use crate::listener::task_spawner;
 use crate::model::cli::CliArgs;
 
-mod model;
 mod listener;
+mod model;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let args: CliArgs = argh::from_env();
-	env_logger::init();
+    let args: CliArgs = argh::from_env();
+    env_logger::init();
 
-	let handles = task_spawner(args.subnet, args.port).await;
+    let handles = task_spawner(args.subnet, args.port).await;
 
-	signal::ctrl_c().await?;
-	for h in handles {
-		h.abort();
-	}
+    signal::ctrl_c().await?;
+    for h in handles {
+        h.abort();
+    }
 
-	Ok(())
+    Ok(())
 }
