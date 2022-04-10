@@ -10,13 +10,13 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
-use tokio::time::{Instant, sleep};
+use tokio::time::{sleep, Instant};
 
 pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<IoResult<()>>> {
 	let addr = subnet.addr();
 	let suffix_len = 32 - subnet.prefix_len();
 
-	let mut stack = vec![];
+    let mut stack = vec![];
 
 	for i in 1..(1 << suffix_len) {
 		let addr = SocketAddrV4::new(addr.clone().saturating_add(i as u32), port);
@@ -26,25 +26,25 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<IoResult
 
 		let (tx, rx) = mpsc::channel(4);
 
-		let listener = tokio::spawn(async move {
-			let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), i));
-			let sock = TcpSocket::new_v4().unwrap();
-			sock.bind(bind_addr)?;
+        let listener = tokio::spawn(async move {
+            let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), i));
+            let sock = TcpSocket::new_v4().unwrap();
+            sock.bind(bind_addr)?;
 
-			let listener = sock.listen(4)?;
-			loop {
-				let listened = listener.accept().await;
+            let listener = sock.listen(4)?;
+            loop {
+                let listened = listener.accept().await;
 
-				match listened {
-					Ok((sock, addr)) => {
-						let _ = tx.send((sock, addr)).await;
-					}
-					Err(e) => error!("{:?}",e)
-				}
-			}
-		});
+                match listened {
+                    Ok((sock, addr)) => {
+                        let _ = tx.send((sock, addr)).await;
+                    }
+                    Err(e) => error!("{:?}", e),
+                }
+            }
+        });
 
-		stack.push(listener);
+        stack.push(listener);
 
 		let upstream = socket_server(addr, rx).await;
 		stack.push(upstream);
