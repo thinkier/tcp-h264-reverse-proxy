@@ -33,6 +33,7 @@ pub async fn task_spawner(subnet: Ipv4Net, port: u16) -> Vec<JoinHandle<IoResult
 
                 match listened {
                     Ok((sock, addr)) => {
+                        info!("Connected    {}", addr);
                         let _ = tx.send((sock, addr)).await;
                     }
                     Err(e) => error!("{:?}", e),
@@ -69,12 +70,17 @@ async fn socket_server(
             if downstreams.is_empty() {
                 reinstantiate = false;
                 sleep(Duration::from_millis(50)).await;
-            } else if upstream.is_some() && Instant::now().duration_since(last_unit).as_secs() > 5 {
-                // Reboot the socket if no data was received in 5 secs
-                info!("Dropping inactive upstream {:?}", addr);
             } else if let Some(ref mut upstream) = &mut upstream {
                 trace!("Upstream read");
-                if let Ok(unit) = upstream.try_next().await {
+                if Instant::now().duration_since(last_unit).as_secs() > 5 {
+                    // Reboot the socket if no data was received in 5 secs
+                    info!(
+                        "Dropping inactive upstream and all connections for {:?}",
+                        addr
+                    );
+                    reinstantiate = true;
+                    downstreams.clear();
+                } else if let Ok(unit) = upstream.try_next().await {
                     reinstantiate = false;
                     trace!("Attempting to read from upstream");
 
