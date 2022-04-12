@@ -2,3 +2,5 @@ target
 *.iml
 .idea/
 .git
+docker-compose.yml
+Dockerfile

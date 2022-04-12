@@ -18,4 +18,4 @@ WORKDIR /env
 COPY --from=builder /env/target/release/tcp-h264-reverse-proxy tcp-h264-reverse-proxy
 RUN chmod 500 tcp-h264-reverse-proxy
 
-CMD ./tcp-h264-reverse-proxy
+CMD ./tcp-h264-reverse-proxy --env

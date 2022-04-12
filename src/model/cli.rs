@@ -15,4 +15,9 @@ pub struct CliArgs {
     #[argh(option, short = 'p', default = "1264")]
     /// the port to target for upstream servers
     pub port: u16,
+    #[argh(switch, short = 'e')]
+    /// use envars mode, this will cause the executable to check the following envars:
+    /// TARGET_ADDR: host:port
+    /// LISTEN_PORT: port
+    pub env: bool,
 }
