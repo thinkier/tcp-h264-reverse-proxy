@@ -1,26 +1,24 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use h264_nal_paging::H264NalUnit;
 use tokio::io::{AsyncWriteExt, Result as IoResult};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
 
-pub async fn supervisor(
-    bind_port: u16,
-    (tx, mut rx): (Sender<H264NalUnit>, Receiver<H264NalUnit>),
-) -> (JoinHandle<()>, JoinHandle<IoResult<()>>) {
+use crate::model::message::Message;
+use crate::utils::abort;
+
+pub async fn supervisor(bind_port: u16, (tx, mut rx): (Sender<Message>, Receiver<Message>)) {
     let cached_bytes = Arc::new(RwLock::new(vec![]));
 
-    let cacher = {
+    {
         let cached_bytes = Arc::clone(&cached_bytes);
         tokio::spawn(async move {
             let mut seq_param = None;
             let mut pic_param = None;
 
-            while let Ok(unit) = rx.recv().await {
+            while let Ok(Message::NalUnit(unit)) = rx.recv().await {
                 match unit.unit_code {
                     7 => {
                         seq_param = Some(unit);
@@ -42,10 +40,12 @@ pub async fn supervisor(
                     _ => cached_bytes.write().await.extend(unit.raw_bytes),
                 }
             }
-        })
-    };
 
-    let server = tokio::spawn(async move {
+            debug!("[cacher] Caught error or abort, exiting...");
+        });
+    }
+
+    tokio::spawn(async move {
         let listener = TcpListener::bind(SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
             bind_port,
@@ -55,7 +55,16 @@ pub async fn supervisor(
         loop {
             let cached_bytes = Arc::clone(&cached_bytes);
             let mut rx = tx.subscribe();
-            match listener.accept().await {
+
+            let next = tokio::select! {
+                next = listener.accept() => next,
+                _ = abort(tx.subscribe()) => {
+                    debug!("[listener] Caught abort, exiting...");
+                    return Ok(());
+                }
+            };
+
+            match next {
                 Ok((mut sock, addr)) => tokio::spawn(async move {
                     let bytes = { (cached_bytes.read().await.as_ref() as &Vec<u8>).clone() };
                     if let Err(e) = sock.write_all(&bytes).await {
@@ -63,17 +72,17 @@ pub async fn supervisor(
                         return;
                     }
 
-                    while let Ok(unit) = rx.recv().await {
+                    while let Ok(Message::NalUnit(unit)) = rx.recv().await {
                         if let Err(e) = sock.write_all(&unit.raw_bytes).await {
                             error!("{} was disconnected due to {}", addr, e);
                             return;
                         }
                     }
+
+                    debug!("[socket task {}] Caught error or abort, exiting...", addr);
                 }),
-                Err(e) => return Err(e),
+                Err(e) => return Err(e) as IoResult<()>,
             };
         }
     });
-
-    (cacher, server)
 }

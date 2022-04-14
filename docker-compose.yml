@@ -3,7 +3,8 @@ services:
     build: .
     restart: always
     ports:
-      - 127.0.0.1:18204:1264
+      - 127.0.0.1:18206:1264
     environment:
-      TARGET: 192.168.1.204
+      TARGET: 192.168.1.206:1264
       PORT: 1264
+      RUST_LOG: debug
