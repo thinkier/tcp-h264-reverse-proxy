@@ -32,7 +32,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             target_port.parse()?,
         ))
     };
-    let bind_port = env::var("PORT")?.parse::<u16>().unwrap_or(1264);
+    let bind_port = env::var("PORT")
+        .unwrap_or(String::new())
+        .parse::<u16>()
+        .unwrap_or(1264);
 
     let ch = upstream::supervisor(target).await;
     let tx = ch.0.clone();
