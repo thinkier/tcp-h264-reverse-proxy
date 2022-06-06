@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+
 extern crate env_logger;
 extern crate h264_nal_paging;
 #[macro_use]
@@ -14,6 +16,7 @@ use crate::model::message::Message;
 
 mod downstream;
 mod model;
+mod still;
 mod upstream;
 mod utils;
 
@@ -32,14 +35,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
             target_port.parse()?,
         ))
     };
-    let bind_port = env::var("PORT")
+    let video_port = env::var("VIDEO_PORT")
         .unwrap_or(String::new())
         .parse::<u16>()
         .unwrap_or(1264);
 
     let ch = upstream::supervisor(target).await;
     let tx = ch.0.clone();
-    downstream::supervisor(bind_port, ch).await;
+    let frame_buf = downstream::supervisor(video_port, ch).await;
+    still::serve(frame_buf).await;
 
     // Termination Handlers
     let mut sigint = signal(SignalKind::interrupt())?;

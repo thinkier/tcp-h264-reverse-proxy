@@ -9,7 +9,10 @@ use tokio::sync::RwLock;
 use crate::model::message::Message;
 use crate::utils::abort;
 
-pub async fn supervisor(bind_port: u16, (tx, mut rx): (Sender<Message>, Receiver<Message>)) {
+pub async fn supervisor(
+    bind_port: u16,
+    (tx, mut rx): (Sender<Message>, Receiver<Message>),
+) -> Arc<RwLock<Vec<u8>>> {
     let cached_bytes = Arc::new(RwLock::new(vec![]));
 
     {
@@ -44,45 +47,49 @@ pub async fn supervisor(bind_port: u16, (tx, mut rx): (Sender<Message>, Receiver
             debug!("[cacher] Caught error or abort, exiting...");
         });
     }
+    {
+        let cached_bytes = Arc::clone(&cached_bytes);
+        tokio::spawn(async move {
+            let listener = TcpListener::bind(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                bind_port,
+            ))
+            .await?;
 
-    tokio::spawn(async move {
-        let listener = TcpListener::bind(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            bind_port,
-        ))
-        .await?;
+            loop {
+                let cached_bytes = Arc::clone(&cached_bytes);
+                let mut rx = tx.subscribe();
 
-        loop {
-            let cached_bytes = Arc::clone(&cached_bytes);
-            let mut rx = tx.subscribe();
-
-            let next = tokio::select! {
-                next = listener.accept() => next,
-                _ = abort(tx.subscribe()) => {
-                    debug!("[listener] Caught abort, exiting...");
-                    return Ok(());
-                }
-            };
-
-            match next {
-                Ok((mut sock, addr)) => tokio::spawn(async move {
-                    let bytes = { (cached_bytes.read().await.as_ref() as &Vec<u8>).clone() };
-                    if let Err(e) = sock.write_all(&bytes).await {
-                        error!("{} was disconnected due to {}", addr, e);
-                        return;
+                let next = tokio::select! {
+                    next = listener.accept() => next,
+                    _ = abort(tx.subscribe()) => {
+                        debug!("[listener] Caught abort, exiting...");
+                        return Ok(());
                     }
+                };
 
-                    while let Ok(Message::NalUnit(unit)) = rx.recv().await {
-                        if let Err(e) = sock.write_all(&unit.raw_bytes).await {
+                match next {
+                    Ok((mut sock, addr)) => tokio::spawn(async move {
+                        let bytes = { (cached_bytes.read().await.as_ref() as &Vec<u8>).clone() };
+                        if let Err(e) = sock.write_all(&bytes).await {
                             error!("{} was disconnected due to {}", addr, e);
                             return;
                         }
-                    }
 
-                    debug!("[socket task {}] Caught error or abort, exiting...", addr);
-                }),
-                Err(e) => return Err(e) as IoResult<()>,
-            };
-        }
-    });
+                        while let Ok(Message::NalUnit(unit)) = rx.recv().await {
+                            if let Err(e) = sock.write_all(&unit.raw_bytes).await {
+                                error!("{} was disconnected due to {}", addr, e);
+                                return;
+                            }
+                        }
+
+                        debug!("[socket task {}] Caught error or abort, exiting...", addr);
+                    }),
+                    Err(e) => return Err(e) as IoResult<()>,
+                };
+            }
+        })
+    };
+
+    return cached_bytes;
 }

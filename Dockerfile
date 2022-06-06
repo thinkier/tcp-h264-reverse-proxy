@@ -15,6 +15,7 @@ RUN cargo build --release
 
 FROM debian:buster
 WORKDIR /env
+RUN apt-get update; apt-get install -y ffmpeg
 COPY --from=builder /env/target/release/tcp-h264-reverse-proxy tcp-h264-reverse-proxy
 RUN chmod 500 tcp-h264-reverse-proxy
 
