@@ -1,5 +1,3 @@
-#![feature(async_closure)]
-
 extern crate env_logger;
 extern crate h264_nal_paging;
 #[macro_use]
