@@ -13,9 +13,7 @@ use tokio::process::Command;
 use tokio::sync::RwLock;
 
 pub async fn serve(rx: Arc<RwLock<Vec<u8>>>) {
-    let app = Router::new()
-        .route("/", get(render))
-        .layer(Extension(Arc::new(rx)));
+    let app = Router::new().route("/", get(render)).layer(Extension(rx));
 
     let still_port = env::var("STILL_PORT")
         .unwrap_or(String::new())
