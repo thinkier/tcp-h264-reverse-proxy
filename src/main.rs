@@ -7,8 +7,7 @@ extern crate tokio;
 use std::env;
 use std::error::Error;
 use std::net::{SocketAddr, SocketAddrV4};
-
-use tokio::signal::unix::*;
+use tokio::signal;
 
 use crate::model::message::Message;
 
@@ -39,21 +38,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or(1264);
 
     let ch = upstream::supervisor(target).await;
-    let tx = ch.0.clone();
     let frame_buf = downstream::supervisor(video_port, ch).await;
     still::serve(frame_buf).await;
 
-    // Termination Handlers
-    let mut sigint = signal(SignalKind::interrupt())?;
-    let mut sigterm = signal(SignalKind::terminate())?;
-    let mut sigquit = signal(SignalKind::quit())?;
-    tokio::select! {
-        _ = sigint.recv() => (),
-        _ = sigterm.recv() => (),
-        _ = sigquit.recv() => (),
-    }
-    tx.send(Message::Abort)?;
-    debug!("[main] Sent abort signal, exiting...");
+    signal::ctrl_c().await?;
 
     Ok(())
 }

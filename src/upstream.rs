@@ -37,10 +37,6 @@ pub async fn supervisor(addr: SocketAddr) -> (Sender<Message>, Receiver<Message>
                         );
                         last = Instant::now();
                     }
-                    Ok(Message::Abort) => {
-                        debug!("[upstream supervisor] Caught abort, exiting...");
-                        return;
-                    }
                     _ => {}
                 }
 

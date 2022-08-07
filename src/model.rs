@@ -4,6 +4,5 @@ pub mod message {
     #[derive(Clone, Debug)]
     pub enum Message {
         NalUnit(H264NalUnit),
-        Abort,
     }
 }
